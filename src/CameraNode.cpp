@@ -98,7 +98,6 @@ private:
   int64_t time_offset = 0;
 
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_image;
-  rclcpp::Publisher<sensor_msgs::msg::CompressedImage>::SharedPtr pub_image_compressed;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_ci;
 
   camera_info_manager::CameraInfoManager cim;
@@ -112,17 +111,11 @@ private:
   OnSetParametersCallbackHandle::SharedPtr param_cb_change;
 #endif
 
-  // compression quality parameter
-  std::atomic_uint8_t jpeg_quality;
-
   void
   requestComplete(libcamera::Request *const request);
 
   void
   process(libcamera::Request *const request);
-
-  void
-  postParameterChange(const std::vector<rclcpp::Parameter> &parameters);
 
 #ifndef RCLCPP_HAS_PARAM_EXT_CB
   rcl_interfaces::msg::SetParametersResult
@@ -181,51 +174,12 @@ get_sensor_format(const std::string &format_str)
   throw std::runtime_error("Invalid sensor_mode. Expected [width]:[height] but got " + format_str);
 }
 
-// The following function "compressImageMsg" is adapted from "CvImage::toCompressedImageMsg"
-// (https://github.com/ros-perception/vision_opencv/blob/066793a23e5d06d76c78ca3d69824a501c3554fd/cv_bridge/src/cv_bridge.cpp#L512-L535)
-// and covered by the BSD-3-Clause licence.
-void
-compressImageMsg(const sensor_msgs::msg::Image &source,
-                 sensor_msgs::msg::CompressedImage &destination,
-                 const std::vector<int> &params = std::vector<int>())
-{
-  namespace enc = sensor_msgs::image_encodings;
-
-  std::shared_ptr<CameraNode> tracked_object;
-  cv_bridge::CvImageConstPtr cv_ptr = cv_bridge::toCvShare(source, tracked_object);
-
-  destination.header = source.header;
-  cv::Mat image;
-  if (cv_ptr->encoding == enc::BGR8 || cv_ptr->encoding == enc::BGRA8 ||
-      cv_ptr->encoding == enc::MONO8 || cv_ptr->encoding == enc::MONO16)
-  {
-    image = cv_ptr->image;
-  }
-  else {
-    cv_bridge::CvImagePtr tempThis = std::make_shared<cv_bridge::CvImage>(*cv_ptr);
-    cv_bridge::CvImagePtr temp;
-    if (enc::hasAlpha(cv_ptr->encoding)) {
-      temp = cv_bridge::cvtColor(tempThis, enc::BGRA8);
-    }
-    else {
-      temp = cv_bridge::cvtColor(tempThis, enc::BGR8);
-    }
-    image = temp->image;
-  }
-
-  destination.format = "jpg";
-  cv::imencode(".jpg", image, destination.data, params);
-}
-
-
 CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     : Node("camera", options),
       cim(this),
       parameter_handler(this),
       param_cb_change(
-#ifdef RCLCPP_HAS_PARAM_EXT_CB
-        add_post_set_parameters_callback(std::bind(&CameraNode::postParameterChange, this, std::placeholders::_1))
-#else
+#ifndef RCLCPP_HAS_PARAM_EXT_CB
         add_on_set_parameters_callback(std::bind(&CameraNode::onParameterChange, this, std::placeholders::_1))
 #endif
       )
@@ -266,27 +220,8 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
   // camera ID
   declare_parameter("camera", rclcpp::ParameterValue {}, param_descr_ro.set__dynamic_typing(true));
 
-  // we cannot control the compression rate of the libcamera MJPEG stream
-  // ignore "jpeg_quality" parameter for MJPEG streams
-  if (libcamera::PixelFormat::fromString(format) != libcamera::formats::MJPEG) {
-    rcl_interfaces::msg::ParameterDescriptor jpeg_quality_description;
-    jpeg_quality_description.name = "jpeg_quality";
-    jpeg_quality_description.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-    jpeg_quality_description.description = "Image quality for JPEG format";
-    jpeg_quality_description.read_only = false;
-    rcl_interfaces::msg::IntegerRange jpeg_range;
-    jpeg_range.from_value = 1;
-    jpeg_range.to_value = 100;
-    jpeg_range.step = 1;
-    jpeg_quality_description.integer_range = {jpeg_range};
-    // default to 95
-    jpeg_quality = declare_parameter<uint8_t>("jpeg_quality", 95, jpeg_quality_description);
-  }
-
-  // publisher for raw and compressed image
+  // publisher for raw image
   pub_image = this->create_publisher<sensor_msgs::msg::Image>("~/image_raw", 1);
-  pub_image_compressed =
-    this->create_publisher<sensor_msgs::msg::CompressedImage>("~/image_raw/compressed", 1);
   pub_ci = this->create_publisher<sensor_msgs::msg::CameraInfo>("~/camera_info", 1);
 
   // start camera manager and check for cameras
@@ -593,7 +528,6 @@ CameraNode::process(libcamera::Request *const request)
       const libcamera::StreamConfiguration &cfg = stream->configuration();
 
       auto msg_img = std::make_unique<sensor_msgs::msg::Image>();
-      auto msg_img_compressed = std::make_unique<sensor_msgs::msg::CompressedImage>();
 
       if (format_type(cfg.pixelFormat) == FormatType::RAW) {
         // raw uncompressed image
@@ -606,19 +540,9 @@ CameraNode::process(libcamera::Request *const request)
         msg_img->is_bigendian = (__BYTE_ORDER__ == __ORDER_BIG_ENDIAN__);
         msg_img->data.resize(buffer_info[buffer].size);
         memcpy(msg_img->data.data(), buffer_info[buffer].data, buffer_info[buffer].size);
-
-        // compress to jpeg
-        if (pub_image_compressed->get_subscription_count()) {
-          try {
-            compressImageMsg(*msg_img, *msg_img_compressed,
-                             {cv::IMWRITE_JPEG_QUALITY, jpeg_quality});
-          }
-          catch (const cv_bridge::Exception &e) {
-            RCLCPP_ERROR_STREAM(get_logger(), e.what());
-          }
-        }
       }
       else if (format_type(cfg.pixelFormat) == FormatType::COMPRESSED) {
+        auto msg_img_compressed = std::make_unique<sensor_msgs::msg::CompressedImage>();
         // compressed image
         assert(bytesused < buffer_info[buffer].size);
         msg_img_compressed->header = hdr;
@@ -636,7 +560,6 @@ CameraNode::process(libcamera::Request *const request)
       }
 
       pub_image->publish(std::move(msg_img));
-      pub_image_compressed->publish(std::move(msg_img_compressed));
 
       sensor_msgs::msg::CameraInfo ci = cim.getCameraInfo();
       ci.header = hdr;
@@ -661,23 +584,10 @@ CameraNode::process(libcamera::Request *const request)
   }
 }
 
-void
-CameraNode::postParameterChange(const std::vector<rclcpp::Parameter> &parameters)
-{
-  // check non-control parameters
-  for (const rclcpp::Parameter &parameter : parameters) {
-    if (parameter.get_name() == "jpeg_quality") {
-      jpeg_quality = parameter.get_parameter_value().get<uint8_t>();
-    }
-  }
-}
-
 #ifndef RCLCPP_HAS_PARAM_EXT_CB
 rcl_interfaces::msg::SetParametersResult
 CameraNode::onParameterChange(const std::vector<rclcpp::Parameter> &parameters)
 {
-  postParameterChange(parameters);
-
   rcl_interfaces::msg::SetParametersResult result;
   result.successful = true;
   return result;
