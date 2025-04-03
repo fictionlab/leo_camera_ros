@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(leo_camera_ros)
+project(leo_camera)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -56,8 +56,8 @@ ament_target_dependencies(
 set_property(TARGET param PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # composable ROS2 node
-add_library(camera_component SHARED src/CameraNode.cpp)
-rclcpp_components_register_node(camera_component PLUGIN "camera::CameraNode" EXECUTABLE "camera_node")
+add_library(${PROJECT_NAME} SHARED src/CameraNode.cpp)
+rclcpp_components_register_node(${PROJECT_NAME} PLUGIN "leo_camera::CameraNode" EXECUTABLE "camera_node")
 set(PACKAGE_DEPENDENCIES
   "rclcpp"
   "rclcpp_components"
@@ -65,22 +65,17 @@ set(PACKAGE_DEPENDENCIES
   "camera_info_manager"
   "cv_bridge"
 )
-ament_target_dependencies(camera_component PUBLIC ${PACKAGE_DEPENDENCIES})
-target_include_directories(camera_component PUBLIC ${libcamera_INCLUDE_DIRS})
-target_link_libraries(camera_component PUBLIC ${libcamera_LINK_LIBRARIES})
-target_link_libraries(camera_component PRIVATE utils param)
+ament_target_dependencies(${PROJECT_NAME} PUBLIC ${PACKAGE_DEPENDENCIES})
+target_include_directories(${PROJECT_NAME} PUBLIC ${libcamera_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${libcamera_LINK_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PRIVATE utils param)
 
-ament_export_targets(camera_componentTargets HAS_LIBRARY_TARGET)
+ament_export_targets(${PROJECT_NAME}_export HAS_LIBRARY_TARGET)
 ament_export_dependencies(${PACKAGE_DEPENDENCIES})
 
-install(TARGETS camera_component
-  EXPORT camera_componentTargets
+install(TARGETS ${PROJECT_NAME}
+  EXPORT ${PROJECT_NAME}_export
   DESTINATION lib)
-
-install(DIRECTORY
-  launch
-  DESTINATION share/${PROJECT_NAME}/
-)
 
 if(BUILD_TESTING)
   set(ament_cmake_clang_format_CONFIG_FILE "${CMAKE_SOURCE_DIR}/.clang-format")

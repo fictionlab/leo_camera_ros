@@ -67,7 +67,7 @@ class NodeOptions;
 }
 
 
-namespace camera
+namespace leo_camera
 {
 class CameraNode : public rclcpp::Node
 {
@@ -111,7 +111,7 @@ private:
   process(libcamera::Request *const request);
 };
 
-RCLCPP_COMPONENTS_REGISTER_NODE(camera::CameraNode)
+RCLCPP_COMPONENTS_REGISTER_NODE(leo_camera::CameraNode)
 
 
 libcamera::StreamRole
