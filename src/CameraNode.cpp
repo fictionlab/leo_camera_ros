@@ -104,23 +104,11 @@ private:
 
   ParameterHandler parameter_handler;
 
-#ifdef RCLCPP_HAS_PARAM_EXT_CB
-  // use new "post_set" callback to apply parameters
-  PostSetParametersCallbackHandle::SharedPtr param_cb_change;
-#else
-  OnSetParametersCallbackHandle::SharedPtr param_cb_change;
-#endif
-
   void
   requestComplete(libcamera::Request *const request);
 
   void
   process(libcamera::Request *const request);
-
-#ifndef RCLCPP_HAS_PARAM_EXT_CB
-  rcl_interfaces::msg::SetParametersResult
-  onParameterChange(const std::vector<rclcpp::Parameter> &parameters);
-#endif
 };
 
 RCLCPP_COMPONENTS_REGISTER_NODE(camera::CameraNode)
@@ -177,12 +165,7 @@ get_sensor_format(const std::string &format_str)
 CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     : Node("camera", options),
       cim(this),
-      parameter_handler(this),
-      param_cb_change(
-#ifndef RCLCPP_HAS_PARAM_EXT_CB
-        add_on_set_parameters_callback(std::bind(&CameraNode::onParameterChange, this, std::placeholders::_1))
-#endif
-      )
+      parameter_handler(this)
 {
   // pixel format
   rcl_interfaces::msg::ParameterDescriptor param_descr_format;
@@ -584,14 +567,4 @@ CameraNode::process(libcamera::Request *const request)
   }
 }
 
-#ifndef RCLCPP_HAS_PARAM_EXT_CB
-rcl_interfaces::msg::SetParametersResult
-CameraNode::onParameterChange(const std::vector<rclcpp::Parameter> &parameters)
-{
-  rcl_interfaces::msg::SetParametersResult result;
-  result.successful = true;
-  return result;
-}
-#endif
-
-} // namespace camera
+} // namespace leo_camera

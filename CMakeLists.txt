@@ -19,6 +19,11 @@ find_package(camera_info_manager REQUIRED)
 find_package(cv_bridge REQUIRED)
 pkg_check_modules(libcamera REQUIRED libcamera>=0.1)
 
+# new param callbacks need at least 17.0.0
+if(${rclcpp_VERSION} VERSION_GREATER_EQUAL "17")
+    add_compile_definitions(RCLCPP_HAS_PARAM_EXT_CB)
+endif()
+
 # library with common utility functions for type conversions
 add_library(utils OBJECT
   src/format_mapping.cpp
