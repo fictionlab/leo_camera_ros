@@ -2,8 +2,8 @@
 Changelog for package leo_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.1.0 (2025-04-03)
+------------------
 * Add file with custom rosdep rules
 * Reset version
 * Change project name to leo_camera
