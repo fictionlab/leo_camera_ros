@@ -3,4 +3,4 @@ libcamera-dev:
     noble: libcamera-dev
 libcamera:
   ubuntu:
-    noble: libcamera0.4
+    noble: libcamera0.5
