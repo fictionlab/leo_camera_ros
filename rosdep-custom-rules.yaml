@@ -1,0 +1,6 @@
+libcamera-dev:
+  ubuntu:
+    noble: libcamera-dev
+libcamera:
+  ubuntu:
+    noble: libcamera0.4
