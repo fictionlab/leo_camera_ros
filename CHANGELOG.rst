@@ -2,8 +2,8 @@
 Changelog for package leo_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.2.0 (2025-05-05)
+------------------
 * Update rosdep rules: use libcamera0.5
 * Import upstream changes (`#2 <https://github.com/fictionlab/leo_camera_ros/issues/2>`_)
   * Added usage documentation for the camera_info_url parameter.
