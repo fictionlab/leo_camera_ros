@@ -2,6 +2,30 @@
 Changelog for package leo_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Update rosdep rules: use libcamera0.5
+* Import upstream changes (`#2 <https://github.com/fictionlab/leo_camera_ros/issues/2>`_)
+  * Added usage documentation for the camera_info_url parameter.
+  * skip parameter declaration when camera has no controls
+  * remove redundant explicit default construction
+  * exclude control 'AeLocked' for libcamera 0.5 and higher
+  * add missing control SensorTemperature
+  * add missing control HdrChannel
+  * add new AEGC-related controls from libcamera 0.5
+  * add missing control AeFlickerDetected
+  * add missing control Gamma
+  * add missing control DebugMetadataEnable
+  * add missing rpi control ScalerCrops
+  * add Raspberry Pi 5 specific control PispStatsOutput
+  * use new 'ExposureTimeMode' instead of 'AeEnable' when available
+  * release 0.4 for libcamera 0.5 support and fixes
+  * fetch "camera" parameter once directly from declaration and reuse
+  * new parameter for camera orientation in 90 degree steps
+  * remove trailig white space
+  * document new "orientation" parameter
+* Contributors: Błażej Sowa, Samyar Sadat Akhavi, Christian Rauch
+
 0.1.0 (2025-04-03)
 ------------------
 * Add file with custom rosdep rules
