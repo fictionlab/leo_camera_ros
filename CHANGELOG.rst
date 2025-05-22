@@ -2,8 +2,8 @@
 Changelog for package leo_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.3.0 (2025-05-22)
+------------------
 * Update rosdep rules: use libcamera0.5
 * Merge pull request `#124 <https://github.com/fictionlab/leo_camera_ros/issues/124>`_ from ahcorde/ahcorde/rolling/replace_ament_target_dependencies
   Replace ament_target_dependencies with target_link_libraries
