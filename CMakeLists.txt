@@ -31,9 +31,9 @@ add_library(utils OBJECT
 )
 target_include_directories(utils PUBLIC ${libcamera_INCLUDE_DIRS})
 target_link_libraries(utils ${libcamera_LINK_LIBRARIES})
-ament_target_dependencies(
+target_link_libraries(
   utils
-  "sensor_msgs"
+  ${sensor_msgs_TARGETS}
 )
 set_property(TARGET utils PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -49,9 +49,9 @@ add_library(param OBJECT
 )
 target_include_directories(param PUBLIC ${libcamera_INCLUDE_DIRS})
 target_link_libraries(param ${libcamera_LINK_LIBRARIES})
-ament_target_dependencies(
+target_link_libraries(
   param
-  "rclcpp"
+  rclcpp::rclcpp
 )
 set_property(TARGET param PROPERTY POSITION_INDEPENDENT_CODE ON)
 
@@ -59,13 +59,13 @@ set_property(TARGET param PROPERTY POSITION_INDEPENDENT_CODE ON)
 add_library(${PROJECT_NAME} SHARED src/CameraNode.cpp)
 rclcpp_components_register_node(${PROJECT_NAME} PLUGIN "leo_camera::CameraNode" EXECUTABLE "camera_node")
 set(PACKAGE_DEPENDENCIES
-  "rclcpp"
-  "rclcpp_components"
-  "sensor_msgs"
-  "camera_info_manager"
-  "cv_bridge"
+  rclcpp::rclcpp
+  rclcpp_components::component
+  ${sensor_msgs_TARGETS}
+  camera_info_manager::camera_info_manager
+  cv_bridge::cv_bridge
 )
-ament_target_dependencies(${PROJECT_NAME} PUBLIC ${PACKAGE_DEPENDENCIES})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${PACKAGE_DEPENDENCIES})
 target_include_directories(${PROJECT_NAME} PUBLIC ${libcamera_INCLUDE_DIRS})
 target_link_libraries(${PROJECT_NAME} PUBLIC ${libcamera_LINK_LIBRARIES})
 target_link_libraries(${PROJECT_NAME} PRIVATE utils param)

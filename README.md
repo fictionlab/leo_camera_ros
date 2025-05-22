@@ -124,6 +124,9 @@ The camera stream is configured once when the node starts via the following stat
 | `format`          | `string`              | a `PixelFormat` that is supported by the camera [default: auto]                                                             |
 | `width`, `height` | `integer`             | desired image resolution [default: auto]                                                                                    |
 | `sensor_mode`     | `string`              | desired raw sensor format resolution (format: `width:height`) [default: auto]                                               |
+| `orientation`     | `integer`             | camera orientation in 90 degree steps (possible choices: `0`, `90`, `180`, `270`) [default: `0`]                            |
+| `camera_info_url` | `string`              | URL for a camera calibration YAML file (see [Calibration](#calibration)) [default: `~/.ros/camera_info/$NAME.yaml`]         |
+| `frame_id`        | `string`              | frame_id of the camera frame used in the header of the image messages                                                       |
 
 
 The configuration is done in the following order:
@@ -141,7 +144,7 @@ The node avoids memory copies of the image data by directly mapping from a camer
 
 ### Sensor Modes and Cropping
 
-Most camera modules provide different sensor modes, some of which provide a smaller resolution version of the full picture, whereas others have a limited field-of-view, e.g. by allowing for the selection of a 3:2 image from a 16:9 sensor, a more native 'digital zoom' effect by cropping the picture etc. The benefit of this is to perform compute intensive tasks at the source (the sensor), rather than downstream in the GPU or in application code. Unless we specify the sensor mode we want, libcamera will automatically select one. Unfortunately, it is not guaranteed that the selected mode will be a full sensor mode, leading to a potential cropping of the picture. 
+Most camera modules provide different sensor modes, some of which provide a smaller resolution version of the full picture, whereas others have a limited field-of-view, e.g. by allowing for the selection of a 3:2 image from a 16:9 sensor, a more native 'digital zoom' effect by cropping the picture etc. The benefit of this is to perform compute intensive tasks at the source (the sensor), rather than downstream in the GPU or in application code. Unless we specify the sensor mode we want, libcamera will automatically select one. Unfortunately, it is not guaranteed that the selected mode will be a full sensor mode, leading to a potential cropping of the picture.
 
 Example: When configuring a 640x480 output stream on a Raspberry Pi Camera Module v2, libcamera will automatically choose a heavily cropped 640x480 sensor mode, leading to a digital zoom of ~2.5x.
 
@@ -162,7 +165,9 @@ ros2 run camera_ros camera_node --ros-args -p FrameDurationLimits:="[50000,50000
 
 ## Calibration
 
-The node uses the `CameraInfoManager` to manage the [camera parameters](https://docs.ros.org/en/rolling/p/image_pipeline/camera_info.html), such as the camera intrinsics for projection and distortion coefficients for rectification. Its tasks include loading the parameters from the calibration file `~/.ros/camera_info/$NAME.yaml`, publishing them on `~/camera_info` and setting new parameters via service `~/set_camera_info`.
+The node uses the `CameraInfoManager` to manage the [camera parameters](https://docs.ros.org/en/rolling/p/image_pipeline/camera_info.html), such as the camera intrinsics for projection and distortion coefficients for rectification. Its tasks include loading the parameters from the calibration file, publishing them on `~/camera_info` and setting new parameters via service `~/set_camera_info`.
+
+The URL for the camera calibration file can be set using the `camera_info_url` parameter, however it defaults to `~/.ros/camera_info/$NAME.yaml`. Note that when setting the URL manually, the provided string must be in the URL format, not a local file path (eg. `file:///home/nonroot/camera/calibration.yaml`). For more information, please take a look at the `CameraInfoManager` [API documentation](https://docs.ros.org/en/ros2_packages/rolling/api/camera_info_manager/generated/classcamera__info__manager_1_1CameraInfoManager.html).
 
 If the camera has not been calibrated yet and the calibration file does not exist, the node will warn the user about the missing file (`Camera calibration file ~/.ros/camera_info/$NAME.yaml not found`) and publish zero-initialised intrinsic parameters. If you do not need to project between the 2D image plane and the 3D camera frame or rectify the image, you can safely ignore this.
 
@@ -171,15 +176,47 @@ To calibrate the camera and set the parameters, you can use the [`cameracalibrat
 
 ## Trouble Shooting
 
-To debug the node, first compile it in `Debug` mode:
+### Log Verbosity
+
+More verbose logging can be enabled by setting the libcamera and node log levels:
 ```sh
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Debug
-```
-and then run the node with libcamera and ROS debug information in `gdb`:
-```sh
-LIBCAMERA_LOG_LEVELS=*:DEBUG ros2 run --prefix 'gdb -ex run --args' camera_ros camera_node --ros-args --log-level camera:=debug -p width:=640 -p height:=480
+LIBCAMERA_LOG_LEVELS=*:DEBUG ros2 run camera_ros camera_node --ros-args --log-level camera:=debug
 ```
 
+### Debugging: Preparation
+
+1. To debug the node with `gdb`, you have to make the debug symbols available:
+    - **binary:** If you are using the binary bloom package (`ros-$ROS_DISTRO-camera-ros`), you also have to install the `dbgsym` packages:
+        ```sh
+        sudo apt install ros-$ROS_DISTRO-libcamera-dbgsym ros-$ROS_DISTRO-camera-ros-dbgsym
+        ```
+    - **source:** If you are compiling from source, you have to set the build type to `Debug`:
+        ```sh
+        colcon build --cmake-args -D CMAKE_BUILD_TYPE=Debug
+        ```
+
+2. Enable core dumps (a.k.a. "core files"):
+    ```sh
+    sudo sysctl -w kernel.core_pattern=/tmp/%e-%t.core
+    ulimit -c unlimited
+    ```
+
+### Debugging: Crash Reports
+
+To provide more information about a crash, generate a core dump or a backtrace with `gdb`. A core dump provides the full memory image of the process and is the best way to debug a process after it crashed. It can also be used to generate a backtrace.
+
+> [!IMPORTANT]
+> The core dump and backtrace contains references to the source code. Therefore, when providing either, you also have to mention for which git tag or commit hash this was generated.
+
+#### core dump
+If core dumps have been enabled, they will be generated automatically at `/tmp/camera_node-$TIME.core` (`$TIME` is seconds since the epoch). Make sure that you ran `ulimit -c unlimited` in the terminal and then reproduce the crash (`ros2 run camera_ros camera_node`), compress the core dump file (`gzip /tmp/camera_node-$TIME.core`), and share the compressed `/tmp/camera_node-$TIME.core.gz` for post-mortem debugging.
+
+#### backtrace
+Run the node and reprduce the crash with `--prefix` set:
+```sh
+LIBCAMERA_LOG_LEVELS=*:DEBUG ros2 run --prefix "gdb -ex='set pagination off' -ex=run -ex=backtrace --args" camera_ros camera_node --ros-args --log-level camera:=debug
+```
+If the process crashes, the backtrace will be shown. Paste the full `stdout` output, including the debug logs and backtrace, in a issue.
 
 ### Common Issues
 
