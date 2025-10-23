@@ -71,24 +71,24 @@ target_link_libraries(
 set_property(TARGET param PROPERTY POSITION_INDEPENDENT_CODE ON)
 
 # composable ROS2 node
-add_library(camera_component SHARED src/CameraNode.cpp)
-rclcpp_components_register_node(camera_component PLUGIN "camera::CameraNode" EXECUTABLE "camera_node")
-target_link_libraries(camera_component PUBLIC
+add_library(${PROJECT_NAME} SHARED src/CameraNode.cpp)
+rclcpp_components_register_node(${PROJECT_NAME} PLUGIN "leo_camera::CameraNode" EXECUTABLE "camera_node")
+target_link_libraries(${PROJECT_NAME} PUBLIC
   rclcpp::rclcpp
   rclcpp_components::component
   ${sensor_msgs_TARGETS}
   camera_info_manager::camera_info_manager
   cv_bridge::cv_bridge
 )
-target_include_directories(camera_component PUBLIC ${libcamera_INCLUDE_DIRS})
-target_link_libraries(camera_component PUBLIC ${libcamera_LINK_LIBRARIES})
-target_link_libraries(camera_component PRIVATE utils param)
+target_include_directories(${PROJECT_NAME} PUBLIC ${libcamera_INCLUDE_DIRS})
+target_link_libraries(${PROJECT_NAME} PUBLIC ${libcamera_LINK_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} PRIVATE utils param)
 
-ament_export_targets(camera_componentTargets HAS_LIBRARY_TARGET)
+ament_export_targets(${PROJECT_NAME}_export HAS_LIBRARY_TARGET)
 ament_export_dependencies(${PACKAGE_DEPENDENCIES})
 
-install(TARGETS camera_component
-  EXPORT camera_componentTargets
+install(TARGETS ${PROJECT_NAME}
+  EXPORT ${PROJECT_NAME}_export
   DESTINATION lib)
 
 if(BUILD_TESTING)
