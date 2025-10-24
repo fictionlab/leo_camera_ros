@@ -2,8 +2,8 @@
 Changelog for package leo_camera
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+0.4.0 (2025-10-24)
+------------------
 * Merge upstream changes (`#3 <https://github.com/fictionlab/leo_camera_ros/issues/3>`_)
 * Contributors: Błażej Sowa, Christian Rauch, Lars Ludvigsen
 
