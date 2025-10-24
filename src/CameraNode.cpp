@@ -95,8 +95,7 @@ private:
   };
   std::unordered_map<const libcamera::FrameBuffer *, buffer_info_t> buffer_info;
 
-  // timestamp offset (ns) from camera time to system time
-  int64_t time_offset = 0;
+  bool use_node_time;
 
   rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr pub_image;
   rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr pub_ci;
@@ -166,7 +165,19 @@ get_sensor_format(const std::string &format_str)
 
 CameraNode::CameraNode(const rclcpp::NodeOptions &options)
     : Node("camera", options),
+#if CIM_HAS_NODE_INTERFACE
+      cim(
+        this->get_node_base_interface(),
+        this->get_node_services_interface(),
+        this->get_node_logging_interface()
+#if CIM_HAS_QoS
+          ,
+        "camera", {}, rclcpp::SystemDefaultsQoS()
+#endif
+          ),
+#else
       cim(this),
+#endif
       parameter_handler(this)
 {
   // pixel format
@@ -200,7 +211,6 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
   // camera frame_id
   frame_id = declare_parameter<std::string>("frame_id", "camera", param_descr_ro);
 
-#if LIBCAMERA_VER_GE(0, 2, 0)
   rcl_interfaces::msg::ParameterDescriptor param_descr_orientation;
   param_descr_orientation.description = "camera orientation";
   rcl_interfaces::msg::IntegerRange orientation_range;
@@ -209,8 +219,14 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
   orientation_range.step = 90;
   param_descr_orientation.integer_range.push_back(orientation_range);
   param_descr_orientation.read_only = true;
-  const libcamera::Orientation orientation = libcamera::orientationFromRotation(
-    declare_parameter<int>("orientation", 0, param_descr_orientation));
+  constexpr int orientation_angle_default = 0;
+  const int angle = declare_parameter<int>("orientation", orientation_angle_default, param_descr_orientation);
+#if LIBCAMERA_VER_GE(0, 2, 0)
+  const libcamera::Orientation orientation = libcamera::orientationFromRotation(angle);
+#else
+  if (angle != orientation_angle_default) {
+    RCLCPP_WARN_STREAM(get_logger(), "parameter 'orientation' not supported on libcamera " << LIBCAMERA_VERSION_MAJOR << "." << LIBCAMERA_VERSION_MINOR);
+  }
 #endif
 
   // camera info file url
@@ -221,6 +237,12 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options)
   // camera ID
   const rclcpp::ParameterValue &camera_id =
     declare_parameter("camera", rclcpp::ParameterValue {}, param_descr_ro.set__dynamic_typing(true));
+
+  // use_node_time parameter
+  rcl_interfaces::msg::ParameterDescriptor param_descr_use_node_time;
+  param_descr_use_node_time.description = "use node time instead of sensor timestamp for image messages";
+  param_descr_use_node_time.read_only = true;
+  use_node_time = declare_parameter<bool>("use_node_time", false, param_descr_use_node_time);
 
   // publisher for raw image
   pub_image = this->create_publisher<sensor_msgs::msg::Image>("~/image_raw", 1);
@@ -532,14 +554,26 @@ CameraNode::process(libcamera::Request *const request)
       for (const libcamera::FrameMetadata::Plane &plane : metadata.planes())
         bytesused += plane.bytesused;
 
-      // set time offset once for accurate timing using the device time
-      if (time_offset == 0)
-        time_offset = this->now().nanoseconds() - metadata.timestamp;
-
-      // send image data
+      // prepare message header
       std_msgs::msg::Header hdr;
-      hdr.stamp = rclcpp::Time(time_offset + int64_t(metadata.timestamp));
       hdr.frame_id = frame_id;
+
+      // if using sensor timestamps, get the sensor timestamp from the request metadata
+      int64_t sensor_latency = 0;
+      if (!use_node_time) {
+        const libcamera::ControlList &req_metadata = request->metadata();
+        if (const std::optional<int64_t> sensor_ts = req_metadata.get(libcamera::controls::SensorTimestamp)) {
+          sensor_latency = rclcpp::Clock(RCL_STEADY_TIME).now().nanoseconds() - sensor_ts.value();
+        }
+        else {
+          RCLCPP_WARN_STREAM_ONCE(get_logger(), "sensor timestamp not available, falling back to node time as reference");
+        }
+      }
+
+      // Adjust timestamp by the sensor latency
+      hdr.stamp = this->now() - rclcpp::Duration::from_nanoseconds(sensor_latency);
+
+      // prepare image messages
       const libcamera::StreamConfiguration &cfg = stream->configuration();
 
       auto msg_img = std::make_unique<sensor_msgs::msg::Image>();
